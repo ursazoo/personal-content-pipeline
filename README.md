@@ -1,8 +1,10 @@
+[中文版](README.zh.md)
+
 # Personal Content Collection System — Setup Guide
 
 This repo is a setup guide, not a runnable program.
 
-Honestly, after years of reading articles I can't remember, and bookmarks I never open again, I spent some time wiring a few existing tools together: drop a link in Discord, and an AI assistant automatically fetches the content, generates a Chinese summary, replies within 30 seconds, and saves it to Obsidian.
+Honestly, after years of reading articles I can't remember, and bookmarks I never open again, I spent some time wiring a few existing tools together: drop a link in a Discord channel, and an AI assistant (OpenClaw) submits it to Karakeep — a self-hosted bookmarking service that crawls the page, calls GLM-4.5-air to generate a Chinese summary, then replies in Discord within 30 seconds. The bookmark syncs to Obsidian automatically.
 
 It worked well enough that I decided to write it up.
 
@@ -156,9 +158,9 @@ INFERENCE_MAX_OUTPUT_TOKENS=4096
 CRAWLER_STORE_SCREENSHOT=false
 ```
 
-> ⚠️ **`INFERENCE_OUTPUT_SCHEMA` must be `plain`**, not `json`. The GLM-4.5 series will literally output `{"answer":"..."}` and your summaries will show as raw JSON strings. Spent a while on this one.
+> **Note:** **`INFERENCE_OUTPUT_SCHEMA` must be `plain`**, not `json`. The GLM-4.5 series will literally output `{"answer":"..."}` and your summaries will show as raw JSON strings. Spent a while on this one.
 
-> ⚠️ **Do not set `HTTP_PROXY`/`HTTPS_PROXY`**. When Clash is unstable it accepts TCP connections then immediately drops the CONNECT tunnel, causing all crawling to fail. `CRAWLER_ALLOWED_INTERNAL_HOSTNAMES=.` already handles the network issue — no proxy needed.
+> **Note:** **Do not set `HTTP_PROXY`/`HTTPS_PROXY`**. When Clash is unstable it accepts TCP connections then immediately drops the CONNECT tunnel, causing all crawling to fail. `CRAWLER_ALLOWED_INTERNAL_HOSTNAMES=.` already handles the network issue — no proxy needed.
 
 ### 1.2 Start Services
 
