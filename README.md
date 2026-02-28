@@ -1,152 +1,150 @@
-# 个人内容收集系统搭建指南
+# Personal Content Collection System — Setup Guide
 
-这个 repo 就是一份搭建指南，不是可以直接跑的程序。
+This repo is a setup guide, not a runnable program.
 
-说实话，工作了这些年，看过的文章记不住，收藏夹打开一次的都少。于是花了一些时间，把几个现成的工具拼在一起：在 Discord 发个链接，AI 自动抓取正文、生成中文摘要，30 秒后回复给你，同时存进 Obsidian 笔记。
+Honestly, after years of reading articles I can't remember, and bookmarks I never open again, I spent some time wiring a few existing tools together: drop a link in Discord, and an AI assistant automatically fetches the content, generates a Chinese summary, replies within 30 seconds, and saves it to Obsidian.
 
-> **平台支持说明：** 目前主要验证过的是**微信公众号文章**。一般的网页（英文文章、博客、新闻）也能用。小红书因为网页版强制登录，Karakeep 无法直接爬取，暂不支持。
+It worked well enough that I decided to write it up.
 
-用下来觉得还行，就整理成文档分享出来。
+> **Platform support:** Primarily tested with **WeChat Official Account articles**. General websites (English articles, blogs, news) work too. Xiaohongshu (Little Red Book) is not supported yet — its web version requires login, which Karakeep can't handle directly.
 
-**这不是开箱即用的工具。** 你需要跑一些命令、填一些配置、踩一些我已经踩过的坑（都记录在附录里了）。
+**This is not an out-of-the-box tool.** You'll need to run some commands, fill in some configs, and hit a few snags I've already documented in the appendix.
 
-如果你也：
+If you:
 
-- 看到好文章习惯性收藏，但收藏了就再也没打开过
-- 想用 AI 整理信息流，但不知道从哪开始
-- 可以接受折腾，但不想从头摸索
+- habitually save articles you never open again
+- want AI to help process your information stream but don't know where to start
+- are fine with some setup work, but don't want to figure everything out from scratch
 
-那可以参考这份指南。照着做不一定完全复现，但至少能少走一些弯路。
+then this guide might save you some time. Following it won't guarantee an exact replica of my setup, but it should get you most of the way there.
 
 ---
 
-## 系统概述
+## System Overview
 
-这套东西分四层，每层干一件事：
+Four layers, each doing one thing:
 
-| 层次 | 组件 | 职责 |
+| Layer | Component | Responsibility |
 |---|---|---|
-| 交互层 | Discord + AI 助手（OpenClaw） | 接收 URL、汇报摘要 |
-| 处理层 | Karakeep（Docker） | 爬取正文、AI 生成摘要和标签 |
-| 知识库层 | Obsidian + Hoarder Sync | 本地 Markdown 笔记，每小时同步 |
-| 备份层 | Obsidian Git + GitHub | 自动版本控制和云备份 |
+| Interaction | Discord + AI assistant (OpenClaw) | Receive URLs, report summaries |
+| Processing | Karakeep (Docker) | Crawl content, AI summarization |
+| Knowledge base | Obsidian + Hoarder Sync | Local Markdown notes, hourly sync |
+| Backup | Obsidian Git + GitHub | Automatic versioning and cloud backup |
 
-## 完整流程图
-
-如果你想搞清楚每一步数据是怎么流转的，可以看这张图：
+## Flow Diagram
 
 ```mermaid
 sequenceDiagram
-    actor 你
-    participant 小陈 as AI 助手 (OpenClaw)
+    actor You
+    participant Assistant as AI Assistant (OpenClaw)
     participant Karakeep as Karakeep (Docker)
-    participant Chrome as Chrome 容器
+    participant Chrome as Chrome Container
     participant GLM as GLM-4.5-Air
     participant Obsidian as Obsidian Hoarder Sync
     participant GitHub
 
-    你->>小陈: 在「情报收集」频道发送 URL
-    小陈-->>你: 回复「收到，正在存入…」
-    小陈->>Karakeep: POST /api/v1/bookmarks（提交 URL）
-    Karakeep-->>小陈: 返回 bookmark ID
+    You->>Assistant: Send URL in #intel channel
+    Assistant-->>You: Reply "Got it, saving..."
+    Assistant->>Karakeep: POST /api/v1/bookmarks
+    Karakeep-->>Assistant: Return bookmark ID
 
-    par Karakeep 异步处理
-        Karakeep->>Chrome: Playwright CDP 连接，打开页面
-        Chrome-->>Karakeep: 返回页面 HTML / 正文
-        Karakeep->>GLM: 发送正文，请求生成摘要和标签
-        GLM-->>Karakeep: 返回结构化中文摘要 + 标签
+    par Karakeep processes async
+        Karakeep->>Chrome: Playwright CDP, open page
+        Chrome-->>Karakeep: Return HTML / content
+        Karakeep->>GLM: Send content, request summary and tags
+        GLM-->>Karakeep: Return structured summary + tags
         Note over Karakeep: summarizationStatus = success
-    and 小陈轮询状态
-        loop 每 5 秒，最多 30 秒
-            小陈->>Karakeep: GET /api/v1/bookmarks/{id}
-            Karakeep-->>小陈: 返回当前状态
+    and Assistant polls
+        loop Every 5s, up to 30s
+            Assistant->>Karakeep: GET /api/v1/bookmarks/{id}
+            Karakeep-->>Assistant: Return current status
         end
     end
 
-    小陈-->>你: 回复文章标题 + 核心主张 + 小陈的看法
+    Assistant-->>You: Reply with title + key insight + reaction
 
-    Note over Obsidian: 每小时定时触发
+    Note over Obsidian: Triggered hourly
     Obsidian->>Karakeep: GET /api/v1/bookmarks?since=lastSyncTimestamp
-    Karakeep-->>Obsidian: 返回新增 / 更新的书签列表
-    Obsidian->>Obsidian: 生成 .md 笔记 + 下载 banner 图片
-    Obsidian->>GitHub: Obsidian Git 自动 commit + push
+    Karakeep-->>Obsidian: Return new/updated bookmarks
+    Obsidian->>Obsidian: Generate .md notes + download images
+    Obsidian->>GitHub: Obsidian Git auto commit + push
 ```
 
 ---
 
-## 前置条件
+## Prerequisites
 
-开始之前先确认这几样东西都准备好了：
+Before starting, confirm you have:
 
-- macOS，已安装 Docker Desktop
-- ZhipuAI 账号和 API Key（免费注册：https://open.bigmodel.cn）
-- Obsidian 已安装
+- macOS with Docker Desktop installed
+- ZhipuAI account and API Key (free registration: https://open.bigmodel.cn)
+- Obsidian installed
 
-> **关于 GLM 模型选择：** ZhipuAI 新账户可用的模型为 `glm-4.5`、`glm-4.5-air`、`glm-4.6` 等。`glm-4.5-air` 性价比最高，本文使用此模型。文档中常见的 `glm-4-flash`、`glm-4-long` 在新账户中不可用。
+> **On model selection:** New ZhipuAI accounts can use `glm-4.5`, `glm-4.5-air`, `glm-4.6`, etc. `glm-4.5-air` offers the best value. `glm-4-flash` and `glm-4-long` mentioned in some older docs are not available on new accounts.
 
 ---
 
-## 第零步：准备 Discord Bot
+## Step 0: Set Up Discord Bot
 
-这步是在浏览器里手动点的，不需要命令行，但有几个地方容易漏掉。
+This is done in the browser — no command line needed. A few things are easy to miss.
 
-### 0.1 创建 Bot
+### 0.1 Create the Bot
 
-1. 前往 https://discord.com/developers/applications → 点击 **New Application**，输入名称（如"情报助手"）→ Create
-2. 左侧菜单 → **Bot** → 点击 **Reset Token** → 复制保存（**只显示一次，妥善保管**）
+1. Go to https://discord.com/developers/applications → **New Application**, enter a name → Create
+2. Left sidebar → **Bot** → click **Reset Token** → copy and save it (**shown only once**)
 
-### 0.2 开启必要权限
+### 0.2 Enable Required Intents
 
-在 Bot 页面下滑到 **Privileged Gateway Intents**，开启以下两项：
+Scroll down to **Privileged Gateway Intents** and enable:
 
-| Intent | 作用 |
+| Intent | Why |
 |---|---|
-| **Message Content Intent** | **必须开启**，否则 Bot 无法读取消息内容 |
-| **Server Members Intent** | 推荐开启，用于成员权限控制 |
+| **Message Content Intent** | **Required** — without this, the bot can't read message content |
+| **Server Members Intent** | Recommended for member permission control |
 
-Message Content Intent 这个我当时就漏了，Bot 启动后死活收不到消息，查了半天才发现。
+I missed Message Content Intent the first time. The bot started fine but received nothing — took me a while to track down.
 
-### 0.3 邀请 Bot 进入服务器
+### 0.3 Invite the Bot to Your Server
 
-1. 左侧菜单 → **OAuth2** → **URL Generator**
-2. **Scopes** 勾选：`bot`、`applications.commands`
-3. **Bot Permissions** 勾选：`View Channels`、`Send Messages`、`Read Message History`、`Embed Links`、`Attach Files`
-4. 复制页面底部生成的 URL，在浏览器新标签页打开
-5. 选择你的服务器 → **授权**（需要服务器管理员权限）
+1. Left sidebar → **OAuth2** → **URL Generator**
+2. **Scopes**: check `bot` and `applications.commands`
+3. **Bot Permissions**: check `View Channels`, `Send Messages`, `Read Message History`, `Embed Links`, `Attach Files`
+4. Copy the generated URL, open it in a new tab
+5. Select your server → **Authorize** (requires server admin)
 
 ---
 
-## 第一步：部署 Karakeep
+## Step 1: Deploy Karakeep
 
-Karakeep 是整套系统的核心，负责爬取正文、生成摘要、存储数据。用 Docker 跑，三个容器（web、chrome、meilisearch），配好 `.env` 基本就能用。
+Karakeep is the core of the system — it crawls content, generates summaries, and stores everything. Runs via Docker with three containers (web, chrome, meilisearch). Get the `.env` right and it mostly just works.
 
-### 1.1 创建配置文件
+### 1.1 Create Config Files
 
 ```bash
 mkdir -p ~/karakeep && cd ~/karakeep
 curl -o docker-compose.yml https://raw.githubusercontent.com/karakeep-app/karakeep/main/docker/docker-compose.yml
 ```
 
-先生成两个随机密钥备用：
+Generate two random secrets:
 
 ```bash
-openssl rand -base64 36  # 用于 NEXTAUTH_SECRET
-openssl rand -base64 36  # 用于 MEILI_MASTER_KEY
+openssl rand -base64 36  # for NEXTAUTH_SECRET
+openssl rand -base64 36  # for MEILI_MASTER_KEY
 ```
 
-创建 `.env` 文件，这是配置最集中的地方，每个字段都有用，别漏：
+Create `.env` — every field here has a purpose, don't skip any:
 
 ```env
 KARAKEEP_VERSION=release
-NEXTAUTH_SECRET=<第一个随机密钥>
-MEILI_MASTER_KEY=<第二个随机密钥>
+NEXTAUTH_SECRET=<first secret>
+MEILI_MASTER_KEY=<second secret>
 NEXTAUTH_URL=http://localhost:3000
 
-# 关键：绕过 Clash fake-ip 导致的 SSRF 拦截（见附录）
+# Critical: bypass SSRF protection blocking Clash fake-ip (see appendix)
 CRAWLER_ALLOWED_INTERNAL_HOSTNAMES=.
 
-# ZhipuAI GLM 配置
-OPENAI_API_KEY=<你的 ZhipuAI API Key>
+# ZhipuAI GLM config
+OPENAI_API_KEY=<your ZhipuAI API Key>
 OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 INFERENCE_TEXT_MODEL=glm-4.5-air
 INFERENCE_IMAGE_MODEL=glm-4.5-air
@@ -158,28 +156,28 @@ INFERENCE_MAX_OUTPUT_TOKENS=4096
 CRAWLER_STORE_SCREENSHOT=false
 ```
 
-> ⚠️ **`INFERENCE_OUTPUT_SCHEMA` 必须设为 `plain`**，不能用 `json`。GLM-4.5 系列会原样输出 `{"answer":"..."}` 导致摘要显示为 JSON 字符串。我在这里卡了挺久的。
+> ⚠️ **`INFERENCE_OUTPUT_SCHEMA` must be `plain`**, not `json`. The GLM-4.5 series will literally output `{"answer":"..."}` and your summaries will show as raw JSON strings. Spent a while on this one.
 
-> ⚠️ **不要配置 `HTTP_PROXY`/`HTTPS_PROXY`**。Clash 代理不稳定时会导致所有爬取全部失败，`CRAWLER_ALLOWED_INTERNAL_HOSTNAMES=.` 已能解决网络问题，无需代理。
+> ⚠️ **Do not set `HTTP_PROXY`/`HTTPS_PROXY`**. When Clash is unstable it accepts TCP connections then immediately drops the CONNECT tunnel, causing all crawling to fail. `CRAWLER_ALLOWED_INTERNAL_HOSTNAMES=.` already handles the network issue — no proxy needed.
 
-### 1.2 启动服务
+### 1.2 Start Services
 
 ```bash
 docker compose up -d
-docker compose ps  # 确认三个容器（web、chrome、meilisearch）均为 Up
+docker compose ps  # confirm all three containers (web, chrome, meilisearch) are Up
 ```
 
-浏览器访问 http://localhost:3000，注册账号。
+Visit http://localhost:3000 and register an account.
 
-### 1.3 创建 API Key
+### 1.3 Create API Key
 
-1. 登录 Web UI → Settings → API Keys
-2. 点击 "Create new API key"
-3. 复制保存（只显示一次）
+1. Web UI → Settings → API Keys
+2. Click "Create new API key"
+3. Copy and save it (shown only once)
 
-### 1.4 验证
+### 1.4 Verify
 
-跑一下这个命令，确认 Karakeep 能正常收到请求：
+Run this to confirm Karakeep is receiving requests:
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/bookmarks \
@@ -188,137 +186,137 @@ curl -X POST http://localhost:3000/api/v1/bookmarks \
   -d '{"type": "link", "url": "https://example.com"}'
 ```
 
-返回含 `"id"` 字段的 JSON 就说明通了。
+If the response contains an `"id"` field, you're good.
 
 ---
 
-## 第二步：配置 Obsidian
+## Step 2: Configure Obsidian
 
-这步是让 Karakeep 存的内容自动同步到 Obsidian，顺便把 vault 备份到 GitHub。
+This step syncs Karakeep's content to Obsidian and optionally backs your vault up to GitHub.
 
-### 2.1 安装插件
+### 2.1 Install Plugins
 
-Obsidian 默认禁用第三方插件，先解锁：Settings → Community Plugins → 关闭 **Safe mode（安全模式）** → 点击 **Turn on community plugins**
+Obsidian disables third-party plugins by default. Unlock first: Settings → Community Plugins → disable **Safe mode** → **Turn on community plugins**
 
-开启后进入 Browse，分别搜索安装：
+Then go to Browse and install:
 
-- **Hoarder Sync**：从 Karakeep 同步书签到 Obsidian
-- **Obsidian Git**：把 vault 自动推送到 GitHub（第 2.4 节配置）
+- **Hoarder Sync**: syncs bookmarks from Karakeep to Obsidian
+- **Obsidian Git**: auto-pushes your vault to GitHub (configured in step 2.4)
 
-### 2.2 配置 Hoarder Sync
+### 2.2 Configure Hoarder Sync
 
-| 设置项 | 值 |
+| Setting | Value |
 |---|---|
-| API Key | 第一步中生成的 API Key |
+| API Key | The key from step 1 |
 | API Endpoint | `http://localhost:3000/api/v1` |
-| Sync Folder | `00 收件箱`（或你喜欢的目录） |
-| Sync Interval | `60`（分钟） |
-| Update Existing Files | **开启** |
+| Sync Folder | `00 Inbox` (or whatever folder you prefer) |
+| Sync Interval | `60` (minutes) |
+| Update Existing Files | **Enable** |
 
-> ⚠️ **"Update Existing Files" 必须开启**。否则书签在 AI 处理完成前就被同步创建了，之后摘要更新了也不会写进文件里。这个默认是关的，容易忽略。
+> ⚠️ **"Update Existing Files" must be enabled.** Otherwise notes get created before AI processing finishes, and the summary never gets written in. This is off by default — easy to miss.
 
-### 2.3 验证
+### 2.3 Verify
 
-命令面板执行 **Hoarder Sync: Start Sync**，检查同步目录下是否出现 `.md` 笔记文件。
+Run **Hoarder Sync: Start Sync** from the command palette and check if `.md` files appear in your sync folder.
 
-### 2.4 配置 Obsidian Git（自动备份到 GitHub）
+### 2.4 Configure Obsidian Git (Auto-backup to GitHub)
 
-这步是把整个 vault 备份到 GitHub，不做也不影响基本功能，但做了之后不用担心本地数据丢失。
+This backs up your entire vault to GitHub. Not required for the core system to work, but worth doing.
 
-#### 2.4.1 在 GitHub 创建私有仓库
+#### 2.4.1 Create a Private GitHub Repo
 
-前往 GitHub → New repository，随便取个名字，设为 **Private**，不初始化任何文件，创建。
+Go to GitHub → New repository, pick a name, set it to **Private**, don't initialize with any files.
 
-#### 2.4.2 生成 SSH Key 并添加到 GitHub
+#### 2.4.2 Generate SSH Key and Add to GitHub
 
 ```bash
 ssh-keygen -t ed25519 -C "your@email.com"
-cat ~/.ssh/id_ed25519.pub  # 复制输出的内容
+cat ~/.ssh/id_ed25519.pub  # copy this output
 ```
 
-前往 GitHub → Settings → **SSH and GPG keys** → **New SSH key**，粘贴公钥保存。
+Go to GitHub → Settings → **SSH and GPG keys** → **New SSH key**, paste the public key.
 
-#### 2.4.3 初始化 vault 并关联远程仓库
+#### 2.4.3 Initialize Vault as Git Repo
 
 ```bash
-cd ~/your-vault           # 替换为你的 Obsidian vault 路径
+cd ~/your-vault           # replace with your Obsidian vault path
 git init
-git remote add origin git@github.com:<用户名>/<仓库名>.git
+git remote add origin git@github.com:<username>/<repo-name>.git
 ```
 
-#### 2.4.4 配置 Obsidian Git 插件
+#### 2.4.4 Configure the Plugin
 
-Obsidian → Settings → **Obsidian Git** → 改两个设置：
+Obsidian → Settings → **Obsidian Git**:
 
-| 设置项 | 值 |
+| Setting | Value |
 |---|---|
-| Auto Commit Interval | `5`（分钟，0 表示禁用） |
-| Auto Push | **开启** |
+| Auto Commit Interval | `5` (minutes, 0 to disable) |
+| Auto Push | **Enable** |
 
-首次可以通过命令面板手动执行 **Obsidian Git: Commit all changes**，确认 SSH 连接没问题。
+For the first time, run **Obsidian Git: Commit all changes** from the command palette to verify the SSH connection works.
 
 ---
 
-## 第三步：配置 AI 助手（OpenClaw）
+## Step 3: Configure AI Assistant (OpenClaw)
 
-这步是让 Discord 里的 AI 助手知道"收到 URL 该干什么"。我用的是 OpenClaw，如果你用其他方式提交 URL 可以跳过，逻辑是一样的。
+This step tells the Discord AI assistant what to do when it receives a URL. I'm using OpenClaw — if you use a different method to submit URLs, skip this and adapt the logic.
 
-### 3.0 安装 OpenClaw
+### 3.0 Install OpenClaw
 
 ```bash
 brew install openclaw
 ```
 
-配置 Discord 渠道：
+Configure Discord channel:
 
 ```bash
 openclaw config
 ```
 
-交互式向导里：选择渠道类型 → **Discord** → 输入第零步保存的 Bot Token → 允许所有频道。
+In the interactive wizard: select channel type → **Discord** → enter the bot token from step 0 → allow all channels.
 
-安装并启动 Gateway 服务：
+Install and start the gateway service:
 
 ```bash
 openclaw gateway install
 openclaw gateway start
 ```
 
-验证：在 Discord 频道 @ 助手发消息，有响应就说明通了。如果没响应，先跑 `openclaw gateway status` 看看服务是否在跑。
+Verify: mention the assistant in a Discord channel — if it responds, you're set. If not, run `openclaw gateway status` to check the service.
 
-### 3.1 在 Discord 创建频道
+### 3.1 Create a Dedicated Channel in Discord
 
-在服务器里新建一个专属频道，专门用来发待收藏的链接，和日常聊天分开。
+Create a new channel specifically for dropping links to save, separate from regular chat.
 
-### 3.2 配置 AI 助手行为
+### 3.2 Configure AI Assistant Behavior
 
-行为配置要写到两个文件里：**TOOLS.md** 放执行步骤，**AGENTS.md** 放触发条件和回复规则。
+The behavior config goes into two files: **TOOLS.md** for execution steps, **AGENTS.md** for trigger conditions and reply rules.
 
-#### TOOLS.md：执行步骤
+#### TOOLS.md: Execution Steps
 
-在 `~/.openclaw/workspace/TOOLS.md` 末尾追加：
+Append to `~/.openclaw/workspace/TOOLS.md`:
 
 ```markdown
-## 情报收集频道 → Karakeep
+## Intel Channel → Karakeep
 
-**频道：** `情报收集`（Discord channel ID: <你的频道ID>）
+**Channel:** `intel` (Discord channel ID: <your channel ID>)
 
-### 流程
+### Flow
 
-**第一步：立刻回复**（不要等 exec 完成再说，先发出去）
+**Step 1: Reply immediately** (don't wait for exec to finish — send first)
 
-**第二步：用 exec 执行提交脚本**
+**Step 2: Run the submit script via exec**
 
-exec 参数：
-- command: 下方提交脚本
+exec params:
+- command: submit script below
 - yieldMs: 10000
 ```
 
-**提交脚本**（exec 1，拿到 ID 就退出，不等 AI 处理）：
+**Submit script** (exec 1 — exits as soon as it gets the ID, doesn't wait for AI processing):
 
 ```bash
 API="<your-karakeep-api-key>"
-URL_TO_SAVE="[用户发送的URL]"
+URL_TO_SAVE="[URL from user message]"
 
 ID=$(curl -s -X POST http://localhost:3000/api/v1/bookmarks \
   -H "Authorization: Bearer $API" \
@@ -329,17 +327,17 @@ ID=$(curl -s -X POST http://localhost:3000/api/v1/bookmarks \
 echo "BOOKMARK_ID: $ID"
 ```
 
-继续在 TOOLS.md 追加：
+Continue appending to TOOLS.md:
 
 ```markdown
-**第三步：拿到 BOOKMARK_ID 后，立刻用第二个 exec 轮询摘要**
+**Step 3: Once you have BOOKMARK_ID, immediately run the poll script via a second exec**
 
-exec 参数：
-- command: 下方轮询脚本（把 BOOKMARK_ID_HERE 替换为上一步得到的 ID）
+exec params:
+- command: poll script below (replace BOOKMARK_ID_HERE with the ID from step 2)
 - yieldMs: 60000
 ```
 
-**轮询脚本**（exec 2，每 5 秒查一次，最多 30 秒）：
+**Poll script** (exec 2 — checks every 5 seconds, up to 30 seconds):
 
 ```bash
 API="<your-karakeep-api-key>"
@@ -372,261 +370,260 @@ print(summary)
 done
 ```
 
-继续在 TOOLS.md 追加：
+Continue appending to TOOLS.md:
 
 ```markdown
-**第四步：拿到输出后发第二条消息**
+**Step 4: Once you have the output, send a second message**
 
-- TITLE → 文章标题
-- ZHUCHANG → 核心主张（用自己的话转述，不要照抄）
-- FULL → 完整摘要，读完后加上自己的看法
-- 30 秒后仍是 pending → 回复「存进去了，AI 还在处理，等会儿 Obsidian 那边会有」
+- TITLE → article title
+- ZHUCHANG → core argument (paraphrase in your own words, don't copy verbatim)
+- FULL → full summary; read it and add your own reaction
+- If still pending after 30s → reply "Saved it, AI is still processing — Obsidian will have it shortly"
 ```
 
-> ⚠️ **两个 exec 必须分开执行**，不能合并成一个。合并后轮询会卡住 Discord 消息监听器（30 秒硬超时），助手会长时间没响应。
+> ⚠️ **The two execs must run separately.** Combining them into one exec will block the Discord message listener past the 30-second hard timeout, leaving the assistant unresponsive for a long time.
 
-#### AGENTS.md：触发条件与回复规则
+#### AGENTS.md: Trigger Conditions and Reply Rules
 
-在 `~/.openclaw/workspace/AGENTS.md` 末尾追加：
+Append to `~/.openclaw/workspace/AGENTS.md`:
 
 ```markdown
-## 情报收集频道：自动入库
+## Intel Channel: Auto-save
 
-当收到来自**情报收集**频道的消息时，无需任何触发词，直接执行以下流程。
+When a message arrives in the **intel** channel, no trigger word needed — execute the following flow directly.
 
-### URL 消息
+### URL messages
 
-**第一步：立刻回复**（不等处理完成，先发出去）
+**Step 1: Reply immediately** (don't wait for processing)
 
-**第二步：执行 TOOLS.md「情报收集频道 → Karakeep」的两个 exec 脚本**
+**Step 2: Run both exec scripts from TOOLS.md "Intel Channel → Karakeep"**
 
-**第三步：拿到摘要后，发第二条消息**，包含三个部分：
-1. 用自己的话说核心是什么（不是照抄摘要）
-2. 加上自己真实的反应——共鸣、质疑、联想，有观点，不说废话
-3. 最后一行告知已存档、稍后同步 Obsidian
+**Step 3: Once summary is ready, send a second message** with three parts:
+1. What the piece is actually about, in your own words (not a copy of the summary)
+2. A genuine reaction — resonance, skepticism, connection to something else. Have an opinion. No filler.
+3. A final line noting it's been archived and will sync to Obsidian shortly
 
-每次根据内容本身有不同的反应，不要让两条回复听起来像同一个模子刻出来的。
+Vary your reactions based on the content. Don't let every reply sound like it came from the same template.
 
-### 禁止：
-- 禁止自行用 WebFetch、browser 抓取内容
-- 禁止自行推送文件到 GitHub
+### Prohibited:
+- Do not fetch content yourself via WebFetch or browser
+- Do not push files to GitHub yourself
 ```
 
 ---
 
-## 常见问题
+## FAQ
 
-整理了一些搭的过程中我自己想到或者被问到的问题，分几类放在这里。
+A few questions I've thought about or been asked while building this.
 
-### 架构设计
+### Architecture
 
-### Q1. 为什么不直接用多个 Agent/Subagent 处理，而是引入 Karakeep？
+### Q1. Why introduce Karakeep instead of handling everything with agents?
 
-其实我也想过这个问题。Agent 做一次性任务很合适，但这套系统需要的东西 Agent 天然给不了：
+I thought about this too. Agents are great for one-off tasks, but this system needs things agents can't naturally provide:
 
-| 功能 | Karakeep 现成提供 | 纯 Agent 方案 |
+| Capability | Karakeep provides | Pure agent approach |
 |---|---|---|
-| 正文爬取（含 JS 渲染） | Playwright 无头浏览器 | WebFetch 无法渲染 JS |
-| AI 摘要 | 异步队列，后台处理 | 每次实时等待，API 费用翻倍 |
-| 数据持久化 | PostgreSQL | 无，会话结束数据丢失 |
-| 全文搜索 | Meilisearch 内置 | 不存在 |
-| Obsidian 同步 | 插件直接对接 | 需自行开发 |
-| 移动端 / 浏览器扩展 | 官方支持 | 无 |
+| Content crawling (JS rendering) | Playwright headless browser | WebFetch can't render JS |
+| AI summarization | Async queue, background processing | Real-time wait, doubled API cost |
+| Data persistence | PostgreSQL | None — data gone when session ends |
+| Full-text search | Meilisearch built-in | Doesn't exist |
+| Obsidian sync | Plugin integration | Would need custom development |
+| Mobile / browser extension | Official support | None |
 
-简单说就是：Karakeep 是基础设施层，负责"存什么、怎么处理、存到哪"；AI 助手是交互层，负责"接收指令、汇报结果"。助手那 30 秒只是提交 + 轮询 + 格式化回复，真正的爬取和摘要在 Karakeep 的异步队列里跑，跟助手在不在线没关系。
+The short version: Karakeep is infrastructure — responsible for "what to store, how to process it, where it goes." The AI assistant is the interaction layer — "receive instruction, report result." The assistant's 30 seconds is just submit + poll + format reply. The actual crawling and summarization runs in Karakeep's async queue, independent of whether the assistant is even online.
 
-### Q5. 两个 exec 分开跑是因为有 30 秒超时，这说明架构有问题吗？
+### Q5. The two-exec pattern exists because of a 30-second timeout. Doesn't that indicate a design problem?
 
-说明的是 Discord API 对 Bot 响应的平台约束，不是这套方案的问题。所有 Discord Bot 框架都面临同样的软超时限制。把轮询拆成独立 exec 是在这个约束下的正常做法。
+It indicates a platform constraint from Discord's API, not a problem with this approach. All Discord bot frameworks face the same soft timeout. Splitting polling into a separate exec is a normal response to that constraint.
 
-其实真正可以改进的是：让 Karakeep 处理完成后主动 webhook 通知助手，而不是让助手主动轮询。Karakeep 支持 webhook，只是还没配。
-
----
-
-### 产品选择
-
-### Q2. 为什么不用 Pocket / Instapaper / Readwise，要自己搭？
-
-说实话，对大多数人来说，**Readwise Reader 可能是更好的选择**。
-
-Readwise Reader 有移动 App、浏览器扩展、高亮标注、RSS 订阅、AI 摘要、全文搜索，功能完整度远超自建方案，价格是 $19.99/月（约 ¥1700/年）。
-
-自建方案的真实优势只有三个：
-
-- **数据所有权**：所有内容在本地，不依赖任何订阅服务存活
-- **完全定制**：摘要 prompt、回复格式、触发行为可以随意改
-- **成本**：只有 GLM API 按量费用，日常使用在个位数人民币/月
-
-如果你不在意这三点，用 Readwise 更省事。选择自建是价值观判断，不是技术优越性。
+The real improvement would be having Karakeep webhook-notify the assistant when processing completes, rather than having the assistant poll. Karakeep supports webhooks — just haven't set it up yet.
 
 ---
 
-### AI 质量
+### Tool Choice
 
-### Q3. AI 摘要准确吗？摘要说"作者认为 X 有益"，但原文是"X 被证伪了"，这种情况会发生吗？
+### Q2. Why not use Pocket / Instapaper / Readwise and skip the self-hosting?
 
-会发生，有数据支撑。
+Honestly, for most people, **Readwise Reader is probably the better choice**.
 
-根据 Vectara Hallucination Leaderboard（2025 年，基于 CNN/Daily Mail 831 篇文档的标准化摘要任务）：
+Readwise Reader has a mobile app, browser extension, highlighting, RSS, AI summaries, full-text search — far more complete than anything self-hosted, at $19.99/month.
 
-| 模型类型 | 幻觉率 |
+The real advantages of self-hosting are only three:
+
+- **Data ownership**: everything is local, no dependency on any subscription staying alive
+- **Full customization**: summary prompts, reply format, trigger behavior — all tweakable
+- **Cost**: only GLM API usage fees, which for personal use runs a few RMB per month
+
+If those three things don't matter to you, Readwise is easier. Choosing to self-host is a values decision, not a technical superiority claim.
+
+---
+
+### AI Quality
+
+### Q3. How accurate are the summaries? Can they get facts wrong?
+
+Yes, they can. There's data on this.
+
+From the Vectara Hallucination Leaderboard (2025, standardized summarization task on 831 CNN/Daily Mail documents):
+
+| Model type | Hallucination rate |
 |---|---|
-| 当前最优模型 | ~1.8% |
-| 主流头部模型平均 | 3–8% |
-| 多文档摘要最差情况 | 高达 75% |
+| Current best models | ~1.8% |
+| Mainstream models average | 3–8% |
+| Multi-document summarization worst case | up to 75% |
 
-GLM-4.5-air 属于中等规格模型，单文档摘要幻觉率预计在 5–10% 区间。
+GLM-4.5-air is a mid-tier model — single-document hallucination rate is probably in the 5–10% range.
 
-但这个问题要放在使用场景里看：这套系统的摘要是**入口筛选器**，不是原文替代。助手的回复让你判断"值不值得点开读原文"，不是让你直接引用摘要结论。如果你会把 AI 摘要当事实使用，这是使用方式的问题，不是系统的问题。
+But this needs context: these summaries are an **entry-point filter**, not a replacement for the original. The assistant's reply helps you decide "is this worth opening and reading" — not "can I cite this summary as fact." If you'd use AI summaries as factual sources, that's a usage problem, not a system problem.
 
-### Q4. GLM 生成的中文摘要，对英文原文的细节、反讽、语气处理得准吗？
+### Q4. How well does GLM handle English content — nuance, irony, tone?
 
-不能保证，这是实话。GLM 系列是中文优化模型，处理英文细节时在以下场景容易出错：
+Can't guarantee it — honestly. GLM is a Chinese-optimized model. For English content it tends to fail in these specific scenarios:
 
-- **反讽和幽默**：倾向于字面理解，忽略语气
-- **不确定性修饰**：把"研究表明可能"压缩成"研究证明"
-- **专业术语**：偶尔用近义词替换，改变精确含义
+- **Irony and humor**: reads literally, misses the tone
+- **Hedging language**: compresses "research suggests it might" into "research proves"
+- **Technical terms**: occasionally substitutes near-synonyms that shift the precise meaning
 
-纯事实性文章（新闻、技术文档）准确率较高；观点性、文化性、讽刺性内容风险更大。
-
----
-
-### 功能局限
-
-### Q6. 摘要格式为什么是固定的"核心主张 + 标签"？不同内容类型应该用不同格式
-
-这是真实的局限，也是可以改但还没改的地方。
-
-固定格式是当时最快能用起来的方案。更合理的做法是根据内容类型动态调整：
-
-- 论文 → 方法 + 结论 + 局限性
-- 产品评测 → 优缺点 + 适合谁
-- 新闻 → 事件 + 各方立场
-- 观点文章 → 核心论点 + 依据 + 反驳空间
-
-Karakeep 的摘要 prompt 在源码 `packages/shared/prompts.ts` 里可以直接改，属于 prompt engineering 的迭代，还没做到这一步。
-
-### Q7. 收藏了很多文章后，能问助手"这篇和上周存的那篇有什么矛盾"吗？
-
-目前不能自动做到。
-
-现在能做的是主动触发搜索：`@助手 我存过关于 X 的内容吗` → 语义检索 → 返回相关条目 → 你再追问对比。不能做到的是：自动发现两篇文章之间的矛盾并主动推送。这需要入库时对新内容和历史条目做交叉比对，是功能缺失，不是设计哲学。
-
-### Q8. 标签是 GLM 每次独立生成的，没有全局体系，会越来越乱吗？
-
-会，这是现有系统最明显的缺陷之一。
-
-同一个概念可能出现"machine learning"、"机器学习"、"ML"三个标签并存，搜索和过滤都没法关联它们。可行的改进：把现有标签列表注入摘要 prompt，让 GLM 优先复用；或者定期跑一个 agent 任务做聚类归并。属于已知待改进项，还没做。
-
-### Q9. 系统是单向的：你发 URL，它存档。为什么没有反向推送？
-
-这是真实的功能缺失。"文章有续集了"这类推送需要定期检测已收藏 URL 的更新、追踪作者新文章，超出了当前系统范围。技术上 OpenClaw 有 heartbeat 机制可以做，但监控所有收藏文章的更新成本比较高，还没有排进来做。
-
+Purely factual pieces (news, technical docs) tend to be accurate. Opinion pieces, culturally-specific writing, and satire carry more risk.
 
 ---
 
-### 知识管理哲学
+### Limitations
 
-### Q10. 这个系统收集的是数据，不是知识。收藏了一千篇文章后能问"我的知识盲区在哪"吗？
+### Q6. Why is the summary format fixed at "core argument + tags"? Different content types need different formats.
 
-目前不能直接问，而且这个问题是整套系统最值得警惕的地方。
+This is a genuine limitation and something I know should be improved.
 
-心理学上有一个概念叫 **Collector's Fallacy（收藏者谬误）**：人类大脑会把"收藏"和"学习"混淆，收藏行为本身会触发多巴胺释放，产生"任务完成"的错觉，但实际上什么都没有内化。日语里有个词叫 **積ん読（Tsundoku）**，意思是买了书堆在那里不读。这套系统很可能是数字版 Tsundoku。
+Fixed format was the fastest thing to get working. A more sensible approach would be dynamic formatting by content type:
 
-系统能做的是降低"存入"的摩擦，"消化"的摩擦必须由人自己承担。如果你从不打开 Obsidian 里的笔记，这套系统就只是一个更复杂的浏览器书签而已。
+- Academic paper → method + conclusion + limitations
+- Product review → pros/cons + who it's for
+- News → event + different positions
+- Opinion piece → core argument + evidence + room for rebuttal
 
-### Q11. Markdown 文件 + GitHub 是过时的知识管理方式，为什么不用向量数据库支持语义检索？
+Karakeep's summary prompt lives in `packages/shared/prompts.ts` in the source — it can be edited directly. Just hasn't been done yet.
 
-Markdown + Git 是刻意选择的约束，不是技术落后。
+### Q7. After saving a lot of articles, can I ask the assistant "what contradicts what I saved last week"?
 
-向量数据库的真实优势是语义检索，但代价是数据不可人工读写、调试困难、迁移成本高。实用的折中方案是两者并存：Markdown 存原始笔记，memsearch 对其建向量索引，这正是当前系统里已经在做的事。
+Not automatically, right now.
 
-Markdown + Git 的核心价值在于：**你能直接打开看你的知识库**。如果知识库只是向量，你对它的信任度和使用频率都会下降。可读性本身就是知识管理工具的重要指标。
+What works: manually trigger a search — `@assistant have I saved anything about X` → semantic search → returns related items → you ask follow-up questions to compare. What doesn't work: automatically detecting contradictions between two articles and proactively surfacing them. That would require cross-referencing new content against history at save time. It's a missing feature, not a design philosophy.
 
-### Q12. 既然有 AI 助手，为什么还需要人工手动发 URL？助手应该自动监控 RSS 和 Twitter 帮你筛选
+### Q8. Tags are generated independently by GLM each time, with no global taxonomy. Won't they become a mess?
 
-手动发 URL 是刻意设计的摩擦。
+Yes, and this is one of the most obvious weaknesses of the current system.
 
-自动化收藏的真实问题是 RSS 未读数会爆炸，最终导致"标记全部已读"然后放弃整个工具。手动发 URL 意味着你已经做了一次判断："这个值得存。"这个判断本身是一次信息筛选，也是一次浅层认知加工，对记忆有帮助。
+The same concept can end up tagged as "machine learning", "机器学习", and "ML" — and there's no way to connect them for search or filtering. Workable fix: inject the existing tag list into the summary prompt so GLM reuses tags it's already seen. Or run a periodic agent task to cluster and merge synonymous tags. Known issue, not fixed yet.
 
-自动监控 RSS 可以作为功能加入，但加了之后你需要面对"这堆自动存进来的东西我真的都要读吗"的问题。收藏的价值不在于多，在于你真的会用。
+### Q9. The system is one-directional: you send URLs, it archives. Why no reverse push?
+
+This is a real missing feature. "This article got a follow-up" style notifications require periodically checking saved URLs for updates and tracking author new posts — outside the current system's scope. OpenClaw has a heartbeat mechanism that could support this, but monitoring all saved articles for updates has a non-trivial cost. Not prioritized yet.
+
+---
+
+### Knowledge Management
+
+### Q10. This system collects data, not knowledge. After a thousand articles, can you ask "where are my blind spots"?
+
+Not directly, and this is the most important thing to stay cautious about.
+
+There's a psychological concept called the **Collector's Fallacy**: the brain conflates "collecting" with "learning." The act of saving triggers a dopamine release and a sense of task completion — but nothing was actually internalized. Japanese has a word for it: **積ん読 (Tsundoku)** — buying books and letting them pile up unread. This system is very likely a digital version of Tsundoku.
+
+The system can reduce the friction of saving. The friction of actually processing what you saved is yours to bear. If you never open your Obsidian notes, this is just a more elaborate browser bookmarks folder.
+
+### Q11. Markdown + GitHub feels outdated. Why not a vector database for semantic search?
+
+Markdown + Git is a deliberate constraint, not technical lag.
+
+Vector databases genuinely do semantic search better — but the tradeoff is data that can't be read or written by humans, hard to debug, and expensive to migrate away from. The practical middle ground is both: Markdown stores the raw notes, a vector index (memsearch) is built on top. That's what the current system already does.
+
+The core value of Markdown + Git is: **you can open your knowledge base and just read it.** If your knowledge base is pure vectors, your trust in it and actual usage rate will drop. Readability is itself an important metric for knowledge management tools.
+
+### Q12. If there's an AI assistant, why still require manually sending URLs? The assistant should monitor RSS and Twitter automatically.
+
+The manual URL submission is intentional friction.
+
+The real problem with automated collection is that RSS unread counts explode, and you eventually hit "mark all as read" and abandon the tool entirely. Manually sending a URL means you've already made a judgment: "this is worth saving." That judgment is itself an act of information filtering, and a shallow form of cognitive engagement that actually aids retention.
+
+Automated RSS monitoring could be added as a feature — but then you have to face "do I actually want to read all this stuff that auto-saved?" The value of a collection isn't in its size. It's in whether you'll actually use it.
 
 ---
 
 ## Roadmap
 
-当前系统已经可用，以下是从实际使用中整理出的改进方向，按难度排序。有些是已经知道该怎么做只是还没做，有些还没想清楚。
+The system is usable as-is. These are improvements identified from actual use, roughly ordered by difficulty. Some I know exactly how to implement and just haven't done. Some I haven't fully thought through.
 
-### 近期（配置/Prompt 层面，无需额外服务）
+### Near-term (config / prompt level, no new services needed)
 
-- [ ] **Webhook 替换轮询**：配置 Karakeep webhook，处理完成后主动通知助手，消除 exec 2 的等待时间
-- [ ] **按内容类型动态摘要格式**：修改 `packages/shared/prompts.ts`，让 GLM 根据内容类型（论文 / 评测 / 新闻 / 观点）使用不同输出结构
-- [ ] **全局标签注入**：将现有标签列表注入摘要 prompt，让 GLM 优先复用已有标签，减少标签碎片化
+- [ ] **Webhook instead of polling**: configure Karakeep webhooks so it notifies the assistant on completion — eliminates exec 2 wait time
+- [ ] **Dynamic summary format by content type**: edit `packages/shared/prompts.ts` so GLM uses different output structure for papers, reviews, news, opinion pieces
+- [ ] **Inject global tag list**: include existing tags in the summary prompt so GLM reuses them — reduces tag fragmentation
 
-### 中期（需要新增功能模块）
+### Medium-term (requires new functionality)
 
-- [ ] **跨文章语义对比**：入库时对新内容与历史条目做交叉比对，自动标记相关/矛盾的文章
-- [ ] **反向推送**：通过 heartbeat 定期检测已收藏文章的更新，主动推送续集或引用
-- [ ] **标签体系定期归并**：跑定时 agent 任务，对所有标签做聚类，合并同义标签
+- [ ] **Cross-article semantic comparison**: on save, cross-reference new content against history, automatically flag related or contradicting articles
+- [ ] **Reverse push**: use heartbeat to periodically check saved articles for updates, proactively push follow-ups
+- [ ] **Periodic tag consolidation**: run a scheduled agent task to cluster all tags, merge synonyms
 
-### 长期（架构层面扩展）
+### Long-term (architectural expansion)
 
-- [ ] **自动 RSS / Twitter 监控**：订阅信息源，由助手按兴趣模型筛选后自动入库，替代纯手动提交
-- [ ] **知识盲区分析**：基于收藏内容的标签分布，识别覆盖稀疏的主题领域，定期生成报告
+- [ ] **Automated RSS / Twitter monitoring**: subscribe to sources, let the assistant filter by interest model and auto-save, replacing fully manual submission
+- [ ] **Knowledge gap analysis**: based on tag distribution across saved content, identify sparsely covered topic areas, generate periodic reports
 
 ---
 
-## 参考资料
+## References
 
-- [Karakeep 官方文档](https://docs.karakeep.app)
+- [Karakeep Documentation](https://docs.karakeep.app)
 - [Karakeep GitHub](https://github.com/karakeep-app/karakeep)
-- [Obsidian Hoarder Sync 插件](https://github.com/jhofker/obsidian-hoarder)
-- [ZhipuAI 开放平台](https://open.bigmodel.cn)
+- [Obsidian Hoarder Sync Plugin](https://github.com/jhofker/obsidian-hoarder)
+- [ZhipuAI Open Platform](https://open.bigmodel.cn)
 
 ---
 
-## 附录：踩坑记录
+## Appendix: Troubleshooting
 
-正常按上面步骤操作应该不会遇到这些问题，但如果有什么地方跑不通，可以来这里查一下。
+Following the steps above should avoid most of these. But if something breaks, check here first.
 
-### A1. 所有 URL 爬取失败：SSRF 防护拒绝访问保留 IP
+### A1. All URL crawling fails: SSRF protection rejecting reserved IPs
 
-**现象：** `crawlStatus` 均为 `failure`，日志报：
+**Symptom:** All `crawlStatus` values are `failure`, logs show:
 ```
 Refusing to access disallowed resolved address 198.18.x.x for host xxx.com
 ```
 
-**原因：** Karakeep 内置 SSRF 防护，爬取前会做 DNS 解析。Clash Verge 默认用 `198.18.0.0/16` 作为 fake-ip 池，Docker 容器继承宿主机 DNS，外部域名解析到 fake-ip 后触发拦截。
+**Cause:** Karakeep has built-in SSRF protection that does DNS resolution before crawling. Clash Verge uses `198.18.0.0/16` as its fake-ip pool by default. Docker containers inherit the host's DNS, so external domains resolve to fake-ips and trip the SSRF check.
 
-**解决：** `.env` 中加一行：
+**Fix:** Add one line to `.env`:
 ```env
 CRAWLER_ALLOWED_INTERNAL_HOSTNAMES=.
 ```
-`.` 是通配符，匹配所有 hostname，跳过 DNS 解析和 IP 段检查。这是官方提供的配置项（issue #2285）。
+`.` is a wildcard matching all hostnames, bypassing DNS resolution and IP range checks. This is an official config option (issue #2285).
 
 ---
 
-### A2. 配置 Clash 代理后所有爬取失败
+### A2. All crawling fails after configuring Clash proxy
 
-**现象：** 系统原本正常，某天起所有书签 `crawlStatus` 均失败，日志报：
+**Symptom:** System was working, then one day all bookmarks show `crawlStatus` failure with:
 ```
 Proxy connection ended before receiving CONNECT response
 ```
-不只微信，连 Anthropic、GitHub 等也全部失败。
+Not just WeChat — Anthropic, GitHub, everything failing.
 
-**原因：** `.env` 中配置了 `HTTP_PROXY` 指向 Clash。当 Clash 内部状态不稳定时，会接受 TCP 连接后立即中断 CONNECT 隧道，所有 HTTPS 请求失败，系统全面瘫痪。
+**Cause:** `.env` had `HTTP_PROXY` pointing to Clash. When Clash's internal state is unstable, it accepts TCP connections then immediately drops the CONNECT tunnel, breaking all HTTPS requests.
 
-**解决：** 彻底移除 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY` 等代理配置，只保留 `CRAWLER_ALLOWED_INTERNAL_HOSTNAMES=.`。无论 Clash 开着还是关着，爬取都不受影响。
+**Fix:** Remove all proxy config (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`) from `.env`. Keep only `CRAWLER_ALLOWED_INTERNAL_HOSTNAMES=.`. Crawling works regardless of whether Clash is running.
 
 ---
 
-### A3. Obsidian 笔记中图片无法显示
+### A3. Images not showing in Obsidian notes
 
-**现象：** 笔记中有 `![alt](url)` 但图片加载失败。
+**Symptom:** Notes have `![alt](url)` but images fail to load.
 
-**原因：** Obsidian 在 Electron 环境中无法直接渲染外部 URL 图片。
+**Cause:** Obsidian's Electron environment can't render external URL images directly.
 
-**解决：** Hoarder Sync 插件已在 PR #30 中修复（通过 Electron 的 `requestUrl` API 将图片下载到本地，生成 `![[wikilink]]` 格式）。该修复尚未合并到官方仓库，需手动安装 fork 版本：
+**Fix:** Hoarder Sync has a fix in PR #30 (downloads images locally via Electron's `requestUrl` API, generates `![[wikilink]]` format). Not yet merged to the official repo — needs manual installation from the fork:
 
 ```bash
 git clone https://github.com/almendio-dev/obsidian-hoarder /tmp/obsidian-hoarder-fix
@@ -634,51 +631,55 @@ cd /tmp/obsidian-hoarder-fix
 git checkout fix/image-rendering-obsidian
 npm install && npm run build
 
-PLUGIN_DIR="$HOME/<你的vault>/.obsidian/plugins/hoarder-sync"
+PLUGIN_DIR="$HOME/<your-vault>/.obsidian/plugins/hoarder-sync"
 cp "$PLUGIN_DIR/main.js" "$PLUGIN_DIR/main.js.bak"
 cp /tmp/obsidian-hoarder-fix/main.js "$PLUGIN_DIR/main.js"
 ```
 
-重启 Obsidian 生效。
+Restart Obsidian to apply.
 
 ---
 
-### A4. 新书签同步到 Obsidian 后摘要为空
+### A4. Newly synced Obsidian notes have empty summary
 
-**现象：** Karakeep 里摘要已生成，但 Obsidian 笔记中 `summary` 为空。
+**Symptom:** Summary is visible in Karakeep, but the Obsidian note's `summary` field is empty.
 
-**原因：** Hoarder Sync 在 AI 处理完成前就创建了文件，之后 `updateExistingFiles: false`（默认值）阻止了更新。
+**Cause:** Hoarder Sync created the file before AI processing finished. Then `updateExistingFiles: false` (the default) prevented the update from being written.
 
-**解决：** 开启插件的 "Update Existing Files" 选项。已有的空文件需手动删除后重新同步。
+**Fix:** Enable the "Update Existing Files" option in the plugin. Existing empty files need to be manually deleted and re-synced.
 
 ---
 
-### A5. AI 摘要误判近期时间（"2026年可能有误"）
+### A5. AI summary flags recent dates as suspicious ("2026 seems incorrect")
 
-**现象：** 摘要中出现类似"文章提到2026年，但当前是2023年，时间点可能有误"的内容。
+**Symptom:** Summaries include text like "the article mentions 2026, but current year is 2023, this date may be an error."
 
-**原因：** Karakeep 发送给 GLM 的 prompt 中未包含当前日期，模型按训练数据的时间感知（约2023年）判断。
+**Cause:** Karakeep doesn't include the current date in the prompt it sends to GLM, so the model uses its training data's sense of time (~2023).
 
-**解决：** 修改 Karakeep 源码，在 `packages/shared/prompts.ts` 的 `constructSummaryPrompt` 函数中注入当前日期：
+**Fix:** Edit Karakeep source, add current date injection to `constructSummaryPrompt` in `packages/shared/prompts.ts`:
 
 ```typescript
 const today = new Date().toISOString().split("T")[0];
-// 在 prompt 规则中加一行：
+// Add a rule to the prompt:
 // - Today's date is ${today}. Do NOT flag or question dates that are in the past relative to today.
 ```
 
-修改后需本地构建 Docker 镜像。已向上游提交 PR #2529。
+Requires building a local Docker image after the change. PR #2529 submitted upstream.
 
 ---
 
-### A6. OpenClaw 助手更新后无法启动
+### A6. OpenClaw assistant unresponsive after update
 
-**现象：** OpenClaw 自动更新后，助手无响应。
+**Symptom:** OpenClaw auto-updates, assistant stops responding.
 
-**原因：** launchd plist 指向了旧版本的路径，新版本安装后路径变了。
+**Cause:** The launchd plist points to the old binary path — new version installs to a different location.
 
-**解决：**
+**Fix:**
 ```bash
 launchctl bootout gui/$UID/ai.openclaw.gateway
 openclaw gateway install
 ```
+
+---
+
+*Chinese version: [README.zh.md](README.zh.md)*
