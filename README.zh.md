@@ -157,6 +157,7 @@ INFERENCE_LANG=chinese
 INFERENCE_ENABLE_AUTO_SUMMARIZATION=true
 INFERENCE_CONTEXT_LENGTH=8192
 INFERENCE_MAX_OUTPUT_TOKENS=4096
+INFERENCE_JOB_TIMEOUT_SEC=120
 CRAWLER_STORE_SCREENSHOT=false
 ```
 
@@ -708,4 +709,33 @@ cp /tmp/obsidian-hoarder-fix/dist/main.js "$PLUGIN_DIR/main.js"
 
 重启 Obsidian 生效。已经同步的问题笔记需要手动修改文件名和 frontmatter，或者删掉后重新同步。
 
-> **说明：** 该修复已作为 [jhofker/obsidian-hoarder#34](https://github.com/jhofker/obsidian-hoarder/pull/34) 提交到上游，合并后官方插件会自动处理此问题，届时无需手动安装修改版。
+> **说明：** 该修复已作为 [jhofker/obsidian-hoarder#35](https://github.com/jhofker/obsidian-hoarder/pull/35) 提交到上游，合并后官方插件会自动处理此问题，届时无需手动安装修改版。
+
+---
+
+### A8. 新书签摘要持续为空，inference 队列堵塞
+
+**现象：** 同一时段添加的多个书签摘要都是空的。查看 Karakeep 日志，发现同一个 inference job 每隔 30 秒反复超时：
+
+```
+[inference][484] Starting a summary job for bookmark with id "xxx"
+[inference][484] inference job failed: Error: Timeout
+[inference][484] Starting a summary job for bookmark with id "xxx"
+...
+```
+
+**原因：** Karakeep inference worker 默认超时时间为 30 秒（`INFERENCE_JOB_TIMEOUT_SEC`）。当 GLM 生成摘要需要超过 30 秒时（长文章常见），任务超时。与普通失败不同，Liteque（队列库）不把超时计入重试次数，导致这个 job 无限循环，占住唯一的 inference worker，其他所有书签的摘要任务无法执行。
+
+**解决：** 在 `.env` 中添加：
+
+```env
+INFERENCE_JOB_TIMEOUT_SEC=120
+```
+
+然后重启：
+
+```bash
+docker compose restart web
+```
+
+已经卡住（`summarizationStatus = failure`）的书签需要删掉重新添加，才能触发新的摘要生成。

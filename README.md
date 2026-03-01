@@ -155,6 +155,7 @@ INFERENCE_LANG=chinese
 INFERENCE_ENABLE_AUTO_SUMMARIZATION=true
 INFERENCE_CONTEXT_LENGTH=8192
 INFERENCE_MAX_OUTPUT_TOKENS=4096
+INFERENCE_JOB_TIMEOUT_SEC=120
 CRAWLER_STORE_SCREENSHOT=false
 ```
 
@@ -705,7 +706,36 @@ cp /tmp/obsidian-hoarder-fix/dist/main.js "$PLUGIN_DIR/main.js"
 
 Restart Obsidian to apply. Already-synced notes with bad titles need to be manually fixed or deleted and re-synced.
 
-> **Note:** A fix has been submitted upstream as [jhofker/obsidian-hoarder#34](https://github.com/jhofker/obsidian-hoarder/pull/34). Once merged, the official plugin will handle this automatically.
+> **Note:** A fix has been submitted upstream as [jhofker/obsidian-hoarder#35](https://github.com/jhofker/obsidian-hoarder/pull/35). Once merged, the official plugin will handle this automatically.
+
+---
+
+### A8. New bookmarks stuck with empty summary, queue blocked
+
+**Symptom:** Multiple bookmarks added around the same time all have empty summaries. Karakeep logs show the same inference job repeatedly timing out every 30 seconds:
+
+```
+[inference][484] Starting a summary job for bookmark with id "xxx"
+[inference][484] inference job failed: Error: Timeout
+[inference][484] Starting a summary job for bookmark with id "xxx"
+...
+```
+
+**Cause:** Karakeep's inference worker has a default timeout of 30 seconds (`INFERENCE_JOB_TIMEOUT_SEC`). When GLM needs more than 30 seconds to generate a summary (common for long articles), the job times out. Unlike regular failures, Liteque (the queue library) does not count timeouts against the retry limit — the job loops indefinitely, blocking the single inference worker and preventing all other bookmarks from being processed.
+
+**Fix:** Add to `.env`:
+
+```env
+INFERENCE_JOB_TIMEOUT_SEC=120
+```
+
+Then restart:
+
+```bash
+docker compose restart web
+```
+
+Any bookmarks that were stuck (with `summarizationStatus = failure`) will need to be deleted and re-added to trigger a fresh summarization.
 
 ---
 
