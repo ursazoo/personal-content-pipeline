@@ -684,3 +684,28 @@ const today = new Date().toISOString().split("T")[0];
 launchctl bootout gui/$UID/ai.openclaw.gateway
 openclaw gateway install
 ```
+
+---
+
+### A7. Obsidian 笔记标题变成了整段正文
+
+**现象：** 同步后的笔记文件名和 frontmatter `title` 字段里是一大段正文，不是正常标题。
+
+**原因：** 部分微信公众号文章发布时没有设置标题（直接发正文），微信会把文章第一段正文填进页面的 `<title>` 标签。Karakeep 爬取时如实存储了这个值，导致整段正文变成了书签标题。
+
+**解决：** 安装修改版 Hoarder Sync 插件，该版本会检测并跳过这类"脏标题"，改用文章 URL 兜底：
+
+```bash
+git clone https://github.com/ursazoo/obsidian-hoarder /tmp/obsidian-hoarder-fix
+cd /tmp/obsidian-hoarder-fix
+git checkout fix/clean-title-from-summary
+npm install && npm run build
+
+PLUGIN_DIR="$HOME/<你的vault>/.obsidian/plugins/hoarder-sync"
+cp "$PLUGIN_DIR/main.js" "$PLUGIN_DIR/main.js.bak"
+cp /tmp/obsidian-hoarder-fix/dist/main.js "$PLUGIN_DIR/main.js"
+```
+
+重启 Obsidian 生效。已经同步的问题笔记需要手动修改文件名和 frontmatter，或者删掉后重新同步。
+
+> **说明：** 该修复已作为 [jhofker/obsidian-hoarder#34](https://github.com/jhofker/obsidian-hoarder/pull/34) 提交到上游，合并后官方插件会自动处理此问题，届时无需手动安装修改版。

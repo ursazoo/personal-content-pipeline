@@ -684,4 +684,29 @@ openclaw gateway install
 
 ---
 
+### A7. Obsidian note title contains the full article body text
+
+**Symptom:** A synced note's filename and `title` frontmatter field contain a long paragraph of text instead of a real title.
+
+**Cause:** Some WeChat Official Account articles are published without an explicit title. In that case, WeChat fills the HTML `<title>` tag with the first paragraph of the article body. Karakeep stores whatever the page's `<title>` tag contains, so the full body text ends up as the bookmark title.
+
+**Fix:** Install the patched version of the Hoarder Sync plugin, which detects and skips these "dirty" titles and falls back to the article URL instead:
+
+```bash
+git clone https://github.com/ursazoo/obsidian-hoarder /tmp/obsidian-hoarder-fix
+cd /tmp/obsidian-hoarder-fix
+git checkout fix/clean-title-from-summary
+npm install && npm run build
+
+PLUGIN_DIR="$HOME/<your-vault>/.obsidian/plugins/hoarder-sync"
+cp "$PLUGIN_DIR/main.js" "$PLUGIN_DIR/main.js.bak"
+cp /tmp/obsidian-hoarder-fix/dist/main.js "$PLUGIN_DIR/main.js"
+```
+
+Restart Obsidian to apply. Already-synced notes with bad titles need to be manually fixed or deleted and re-synced.
+
+> **Note:** A fix has been submitted upstream as [jhofker/obsidian-hoarder#34](https://github.com/jhofker/obsidian-hoarder/pull/34). Once merged, the official plugin will handle this automatically.
+
+---
+
 *Chinese version: [README.zh.md](README.zh.md)*
