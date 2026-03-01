@@ -18,7 +18,7 @@
 
 这个 repo 就是一份搭建指南，不是可以直接跑的程序。
 
-说实话，工作了这些年，看过的文章记不住，收藏夹打开一次的都少。于是花了一些时间，把几个现成的工具拼在一起：在 Discord 频道发一个链接，OpenClaw 驱动的 AI 助手把它提交给 Karakeep——一个自托管的书签服务——Karakeep 爬取正文，调用 ZhipuAI 的 GLM-4.5-air 生成中文摘要，30 秒内回复到 Discord，同时自动同步进 Obsidian 笔记。
+工作了这些年，看过的文章记不住，收藏夹打开一次的都少。于是花了一些时间，把几个现成的工具拼在一起：在 Discord 频道发一个链接，OpenClaw 驱动的 AI 助手把它提交给 Karakeep——一个自托管的书签服务——Karakeep 爬取正文，调用 ZhipuAI 的 GLM-4.5-air 生成中文摘要，30 秒内回复到 Discord，同时自动同步进 Obsidian 笔记。
 
 <div align="center">
   <img src="docs/assets/discord-demo.png" alt="Discord 效果演示" width="600" />
