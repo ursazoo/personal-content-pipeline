@@ -1,12 +1,30 @@
+<div align="center">
+
+# Personal Content Pipeline
+
+<p>
+  <img src="https://img.shields.io/badge/platform-macOS-lightgrey?logo=apple" alt="Platform: macOS" />
+  <img src="https://img.shields.io/badge/self--hosted-yes-blue?logo=docker" alt="Self-hosted" />
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT" />
+</p>
+
+**Drop a link in Discord. Get an AI summary in 30 seconds. Synced to Obsidian automatically.**
+
 [中文版](README.zh.md)
 
-# Personal Content Collection System — Setup Guide
+</div>
+
+---
 
 This repo is a setup guide, not a runnable program.
 
 Honestly, after years of reading articles I can't remember, and bookmarks I never open again, I spent some time wiring a few existing tools together: drop a link in a Discord channel, and an AI assistant (OpenClaw) submits it to Karakeep — a self-hosted bookmarking service that crawls the page, calls GLM-4.5-air to generate a Chinese summary, then replies in Discord within 30 seconds. The bookmark syncs to Obsidian automatically.
 
 It worked well enough that I decided to write it up.
+
+<div align="center">
+  <img src="docs/assets/discord-demo.png" alt="Discord demo" width="600" />
+</div>
 
 > **Platform support:** Primarily tested with **WeChat Official Account articles**. General websites (English articles, blogs, news) work too. Xiaohongshu (Little Red Book) is not supported yet — its web version requires login, which Karakeep can't handle directly.
 

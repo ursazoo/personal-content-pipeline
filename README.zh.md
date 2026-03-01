@@ -1,10 +1,28 @@
+<div align="center">
+
+# 个人内容收集流水线
+
+<p>
+  <img src="https://img.shields.io/badge/platform-macOS-lightgrey?logo=apple" alt="Platform: macOS" />
+  <img src="https://img.shields.io/badge/self--hosted-yes-blue?logo=docker" alt="Self-hosted" />
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT" />
+</p>
+
+**在 Discord 发个链接，30 秒内得到 AI 摘要，自动同步进 Obsidian。**
+
 [English](README.md)
 
-# 个人内容收集系统搭建指南
+</div>
+
+---
 
 这个 repo 就是一份搭建指南，不是可以直接跑的程序。
 
 说实话，工作了这些年，看过的文章记不住，收藏夹打开一次的都少。于是花了一些时间，把几个现成的工具拼在一起：在 Discord 频道发一个链接，OpenClaw 驱动的 AI 助手把它提交给 Karakeep——一个自托管的书签服务——Karakeep 爬取正文，调用 ZhipuAI 的 GLM-4.5-air 生成中文摘要，30 秒内回复到 Discord，同时自动同步进 Obsidian 笔记。
+
+<div align="center">
+  <img src="docs/assets/discord-demo.png" alt="Discord 效果演示" width="600" />
+</div>
 
 > **平台支持说明：** 目前主要验证过的是**微信公众号文章**。一般的网页（英文文章、博客、新闻）也能用。小红书因为网页版强制登录，Karakeep 无法直接爬取，暂不支持。
 
